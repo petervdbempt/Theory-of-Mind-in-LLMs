@@ -10,29 +10,27 @@ By default, this setup runs standard ToM and LLM agents alongside passive "shado
 
 # Colored Trails: A Theory of Mind (ToM) Benchmark for LLM's
 
-This project replicates and documents the Theory of Mind (ToM) trading agents for the Colored Trails game [1]. The system simulates negotiation between two agents who must exchange resources (colored chips) to traverse a grid board and reach a goal location. The primary focus is on how agents model their opponents' beliefs and goals using recursive reasoning (ToM orders $0, 1, 2$).
+This project replicates and documents the Theory of Mind (ToM) trading agents for the Colored Trails game [1]. The system simulates negotiation between two agents who must exchange resources (colored chips) to traverse a grid board and reach a goal location. The primary focus is on how agents model their opponents' beliefs and goals using recursive reasoning (ToM orders 0, 1, 2).
 
 ## Game Environment
 
 ### Board & Chips
 
-The board is a $5$ x $5$ grid of colored tiles. Players receive four randomly selected chips and must try to reach their goal location. The starting position is always at the center of the board, and there are twelve possible goal locations located at the corners, each requiring at least three steps to reach. Moving onto a tile requires spending one chip of that tile’s color, with the exception that the starting tile is free. Players can only move sideways, not diagonally.
+The board is a 5 x 5 grid of colored tiles. Players receive four randomly selected chips and must try to reach their goal location. The starting position is always at the center of the board, and there are twelve possible goal locations located at the corners, each requiring at least three steps to reach. Moving onto a tile requires spending one chip of that tile’s color, with the exception that the starting tile is free. Players can only move sideways, not diagonally.
 
 ### Scoring
 
-A player's utility $U$ is calculated based on their final position and remaining chips. Players receive $50$ points for reaching their goal, $5$ points per unused chip, and incur a 10-point penalty for each remaining step to the goal.
+A player's utility $U$ is calculated based on their final position and remaining chips. Players receive 50 points for reaching their goal, 5 points per unused chip, and incur a 10-point penalty for each remaining step to the goal.
 
 ### Negotiation
 
 Players enter a negotiation phase before the final scores are determined. The initiator agent proposes a redistribution of chips (Offer $O$). The responder agent can choose one of the following actions:
 
-- Accept: The trade is executed and the game ends.
+* Accept: The trade is executed and the game ends.
+* Reject & Counter: The trade is rejected, roles swap, and negotiation continues.
+* Withdraw: The negotiation ends with no trade.
 
-- Reject & Counter: The trade is rejected, roles swap, and negotiation continues.
-
-- Withdraw: The negotiation ends with no trade.
-
-Every round of negotiation incurs a cost of $-0.1$
+Every round of negotiation incurs a cost of -0.1
 
 ## Agent Design
 
@@ -66,11 +64,11 @@ Second-order agents add an extra layer of recursion. They model their opponent a
 
 ##### Belief Structure
 
-The type beliefs are implemented as a $5$ x $5$ matrix of singular values between $0$ and $1$, all initialized to $1$. The rows of the matrix correspond to the number of chips received, while the columns correspond to the number of chips offered in return.
+The type beliefs are implemented as a 5 x 5 matrix of singular values between 0 and 1, all initialized to 1. The rows of the matrix correspond to the number of chips received, while the columns correspond to the number of chips offered in return.
 
-The color beliefs are implemented as a list, with one value for each potential offer. Again, the values can range between $0$ and $1$, and they are all initialized to $1$. The length of this list depends on the board and available chips.
+The color beliefs are implemented as a list, with one value for each potential offer. Again, the values can range between 0 and 1, and they are all initialized to 1. The length of this list depends on the board and available chips.
 
-Finally, the location beliefs are implemented as a list of probability values representing the likelihood of each tile being the opponent's goal. The list has a length of $12$, corresponding to the number of possible goal locations on the board. Unlike the zero-order beliefs, these values represent a probability distribution and must sum to $1$. They are initialized as a uniform distribution ($1/12$), reflecting that the agent initially considers all locations equally likely.
+Finally, the location beliefs are implemented as a list of probability values representing the likelihood of each tile being the opponent's goal. The list has a length of 12, corresponding to the number of possible goal locations on the board. Unlike the zero-order beliefs, these values represent a probability distribution and must sum to 1. They are initialized as a uniform distribution (1/12), reflecting that the agent initially considers all locations equally likely.
 
 ##### Belief Persistence
 
@@ -90,9 +88,9 @@ Location beliefs are updated only when the agent receives an offer from the oppo
 
 Type beliefs are updated using a standard reinforcement learning rule based on a learning speed parameter:
 
-$$P_{\text{new}} = (1 - \lambda) \cdot P_{\text{old}} + \lambda \cdot R \tag{1}$$
+$$P_{\text{new}} = (1 - \lambda) \cdot P_{\text{old}} + \lambda \cdot R$$
 
-where $R = 1$ for positive events (receiving/accepting) and $R = 0$ for negative events (sending/rejecting). The learning speed $\lambda$ ranges between $[0, 1]$.
+where $R = 1$ for positive events (receiving/accepting) and $R = 0$ for negative events (sending/rejecting). The learning speed $\lambda$ ranges between [0, 1].
 
 The update rules for color beliefs are significantly more complex. Unlike type beliefs, which update a single cell in a matrix, color beliefs update the probabilities of every potential offer in the agent's list simultaneously. For a decrease, the underlying idea is that if one specific offer is rejected, similar or worse offers are also likely to be rejected. In the case of an increase, the logic is similar: if an offer is received (meaning the opponent would accept it), the agent assumes that offers that are strictly worse should have a lower relative probability.
 
@@ -108,27 +106,25 @@ To choose between accepting an offer, making a counter-offer, or withdrawing fro
 
 The zero-order agent computes EV directly using its learned color beliefs. For a potential offer $O$:
 
-$$EV_0(O) = P * G + (1 - P) * -C \tag{2}$$
+$$EV_0(O) = P * G + (1 - P) * -C$$
 
-where $P$ is the likelihood that the offer $O$ will be accepted by the trading partner (taken directly from the color beliefs list), $G$ is the gain in utility for the agent itself, and $C$ is the cost of a round of negotation ($0.1$). In the code this expression is simplified to:
+where $P$ is the likelihood that the offer $O$ will be accepted by the trading partner (taken directly from the color beliefs list), $G$ is the gain in utility for the agent itself, and $C$ is the cost of a round of negotation (0.1). In the code this expression is simplified to:
 
-$$EV_0(O) = P(G + C) - C \tag{3}$$
+$$EV_0(O) = P(G + C) - C$$
 
-An important detail is that when the personal utility gain $G$ is not positive, the expected value is immediately set to minus the negotiation cost ($-C$), and therefore does not always fully reflect the true expected value.
+An important detail is that when the personal utility gain $G$ is not positive, the expected value is immediately set to minus the negotiation cost (-C), and therefore does not always fully reflect the true expected value.
 
 ##### First-Order EV
 
 The first-order agent cannot simply look up $P$, because the probability depends on the opponent's unknown location. Instead, it calculates the EV as a weighted average over all possible opponent locations $L$:
 
-$$EV_1(O) = \sum_{L \in locations} P(L) \cdot EV(O | L) \tag{4}$$
+$$EV_1(O) = \sum_{L \in locations} P(L) \cdot EV(O | L)$$
 
 To calculate $EV(O | L)$, the agent performs a one-step lookahead simulation using its internal opponent model. It considers three outcomes:
 
-- The opponent accepts $O$ right now.
-
-- The opponent rejects $O$ but returns a counter-offer $O_{counter}$. The agent checks if receiving $O_{counter}$ (with an accumulated cost of 2 rounds) is better than withdrawing.
-
-- The opponent rejects $O$ and ends the game (negotiation cost incurred).
+* The opponent accepts $O$ right now.
+* The opponent rejects $O$ but returns a counter-offer $O_{counter}$. The agent checks if receiving $O_{counter}$ (with an accumulated cost of 2 rounds) is better than withdrawing.
+* The opponent rejects $O$ and ends the game (negotiation cost incurred).
 
 The value is determined by:
 
@@ -137,7 +133,7 @@ $$EV(O|L) =
 G(O) - C & \text{if opponent accepts} \\
 \max(G(O_{counter}) - 2 \cdot C, \ -C) & \text{if opponent counters} \\
 -C & \text{if opponent withdraws}
-\end{cases} \tag{5}$$
+\end{cases}$$
 
 where $G$ is the potential gain in utility for the agent itself, and $C$ is negotiation cost. Before evaluating each possible opponent location, a copy of the opponent model’s beliefs is created to ensure that any belief updates made during simulation do not affect the agent’s actual beliefs.
 
@@ -145,7 +141,7 @@ where $G$ is the potential gain in utility for the agent itself, and $C$ is nego
 
 The second-order agent follows the same summation logic as the first-order agent:
 
-$$EV_2(O) = \sum_{L \in locations} P(L) \cdot EV(O | L) \tag{6}$$
+$$EV_2(O) = \sum_{L \in locations} P(L) \cdot EV(O | L)$$
 
 However, the internal simulation of $EV(O | L)$ is deeper. When the second-order agent simulates the opponent's response, it assumes the opponent is a first-order agent. This means the simulation includes the opponent performing a location belief update on the second-order agent's location before deciding whether to accept or counter. This architecture allows the agent to evaluate offers based on their signaling value (e.g., "If I make this offer, the opponent will think I am at location X, which makes them more likely to accept").
 
